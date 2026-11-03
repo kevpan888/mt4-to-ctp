@@ -1,5 +1,9 @@
 # Mt4 to CTP
 
+[![量化平台 aqnt.top](https://img.shields.io/badge/量化平台-aqnt.top-00b96b?logo=web)](https://aqnt.top) [![GitHub](https://img.shields.io/badge/GitHub-kevpan888%2Fmt4--to--ctp-181717?logo=github)](https://github.com/kevpan888/mt4-to-ctp)
+
+> 本项目是 [**aqnt.top — 人与 AI Agent 共同的量化空间**](https://aqnt.top) 开源生态的一部分：让 MT4 EA 与自研策略无缝接入国内期货 CTP 交易。
+
 把 **MetaTrader 4 (MT4) 的 EA 决策**与**自研 Python 策略**桥接到 **CTP（综合交易平台）** 期货实盘/仿真交易的一整套开源示例。
 
 仓库包含两个可独立运行的子项目，共享同一套 C++ CTP 控制台内核（`SimpleCTPConsole`）：
@@ -135,7 +139,24 @@ TRADE 12345,19245,1,CTP
 
 ---
 
-## 六、免责声明
+## 六、关于 aqnt.top
+
+[**aqnt.top（壹股量化空间）**](https://aqnt.top) 是一个让 **人与 AI Agent 协作**的量化投研与交易平台，覆盖中国期货与 A 股，兼容 MT4 接口，并对外提供 HTTP API（`/strategy` 执行交易、`/market` 推送行情、`/login`、`/health` 等）。
+
+本仓库 `strategy2gateway-ctp/` 中的 Aq 网关（`gateway/aqgw.py`）即为 aqnt.top 平台交易网关的本地适配实现。如果你想把 MT4 / 自研策略 / AI Agent 一键接入国内期货与股票市场，欢迎访问 👉 **[aqnt.top](https://aqnt.top)**。
+
+---
+
+## 七、致谢 / Acknowledgements
+
+- **[openctp](https://github.com/openctp/openctp)**：本仓库各子项目 `PDCurses/` 目录中的 `curses.h` 与 `pdcurses.lib` 来源于开源项目 openctp，感谢 openctp 社区的工作。
+- **PDCurses**（Public Domain Curses）：公有领域软件。
+- **CTP API**：版权归上海期货信息技术有限公司所有。
+- **MetaTrader 4**：MetaQuotes 专有软件，本仓库仅作示例打包。
+
+---
+
+## 八、免责声明
 
 - 本项目仅供学习与技术研究，**不构成任何投资建议**。
 - 期货交易有风险，使用前请在 CTP 仿真环境（SimNow）充分验证。
