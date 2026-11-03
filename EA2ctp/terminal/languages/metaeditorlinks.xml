@@ -1,0 +1,24 @@
+<dictionary>
+  caption=Web links
+  <link>
+    caption=MetaQuotes Home Page
+    address=http://www.metaquotes.net
+  </link>
+
+  <link>
+    caption=MetaQuotes Forum
+    address=http://www.metaquotes.net/forum
+  </link>
+  <link>
+    caption=MetaQuotes Language 4
+    address=http://www.metaquotes.net/experts/mql4
+  </link>
+  <link>
+    caption=MetaQuotes Language Articles
+    address=http://www.metaquotes.net/experts/articles
+  </link>
+  <link>
+    caption=MetaQuotes Language Examples
+    address=http://www.metaquotes.net/catalogue
+  </link>
+</dictionary>
