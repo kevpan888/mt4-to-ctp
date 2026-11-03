@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SimpleCTPConsole 使用说明书（行情双路主备 + 双通道下单）</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --ink: #1d2430; --muted: #5b6575; --line: #e3e7ee;
+    --brand: #1f6feb; --brand-soft: #eaf1ff; --ok: #177245; --warn: #9a6200; --bad: #b42318;
+    --code-bg: #0f1621; --code-ink: #d7e0ea;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.7 -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 32px 20px 80px; }
+  header { background: linear-gradient(135deg, #12325c 0%, #1f6feb 100%); color: #fff;
+    border-radius: 14px; padding: 30px 34px; box-shadow: 0 8px 28px rgba(20, 45, 90, .18); }
+  header h1 { margin: 0 0 8px; font-size: 26px; letter-spacing: .3px; }
+  header p { margin: 4px 0 0; opacity: .9; font-size: 14px; }
+  .pill { display: inline-block; background: rgba(255,255,255,.16);
+    border: 1px solid rgba(255,255,255,.28); border-radius: 999px; padding: 2px 10px;
+    margin: 12px 8px 0 0; font-size: 12.5px; }
+  nav { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px 18px; margin: 18px 0 26px; font-size: 14px; }
+  nav a { color: var(--brand); text-decoration: none; margin-right: 16px; white-space: nowrap; }
+  nav a:hover { text-decoration: underline; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 22px 26px; margin-bottom: 20px; }
+  h2 { font-size: 19px; margin: 0 0 14px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 16px; margin: 22px 0 8px; }
+  p { margin: 8px 0; }
+  code { font-family: "Cascadia Code", Consolas, "Courier New", monospace;
+    background: #f0f3f8; border: 1px solid #e1e6ef; border-radius: 5px; padding: 1px 5px; font-size: 13px; }
+  pre { background: var(--code-bg); color: var(--code-ink); border-radius: 10px;
+    padding: 14px 16px; overflow-x: auto; font-size: 13px; line-height: 1.6; margin: 10px 0; }
+  pre code { background: none; border: 0; color: inherit; padding: 0; font-size: inherit; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13.6px; }
+  th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: #f2f5fa; font-weight: 600; white-space: nowrap; }
+  td code { white-space: nowrap; }
+  .note, .warn, .ok { border-radius: 10px; padding: 10px 14px; margin: 12px 0; font-size: 14px; }
+  .note { background: var(--brand-soft); border-left: 4px solid var(--brand); }
+  .warn { background: #fff7e6; border-left: 4px solid var(--warn); }
+  .ok { background: #eefaf2; border-left: 4px solid var(--ok); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+  .kv { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: #fbfcfe; }
+  .kv b { display: block; font-size: 13px; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
+  footer { text-align: center; color: var(--muted); font-size: 13px; margin-top: 26px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>SimpleCTPConsole 使用说明书</h1>
+  <p>CTP 行情主路 + aq 网关备路 · CTP 交易与网关下单双通道 · 文本指令端口 4445</p>
+  <p>本文同时面向人类操作者与自动化 Agent：协议、字段、错误串均按程序实现原样给出。</p>
+  <span class="pill">行情端口 4444</span>
+  <span class="pill">指令端口 4445</span>
+  <span class="pill">网关 127.0.0.1:8222</span>
+  <span class="pill">x86 / CTP 6.7.9</span>
+</header>
+
+<nav>
+  <a href="#overview">1 系统概览</a>
+  <a href="#files">2 组件与文件</a>
+  <a href="#start">3 启动与编译</a>
+  <a href="#config">4 config.ini</a>
+  <a href="#feed">5 行情端口</a>
+  <a href="#order">6 指令端口</a>
+  <a href="#routes">7 路由规则</a>
+  <a href="#ledger">8 订单流水</a>
+  <a href="#strategy">9 策略 demo</a>
+  <a href="#verify">10 验证结果</a>
+  <a href="#trouble">11 故障排查</a>
+  <a href="#agent">12 Agent 速查</a>
+</nav>
+
+<section id="overview">
+  <h2>1 系统概览</h2>
+  <p>SimpleCTPConsole 原为纯行情桥（4444 端口输出 bid/ask 文本）。现改造为“行情双路主备 + 双登录 + 下单路由 + 指令端口”的一体化执行程序。</p>
+  <div class="grid">
+    <div class="kv"><b>行情双路主备</b>CTP 行情为主路：10 秒内无 tick 或连接断开即自动切到 aq 网关 SSE；CTP 恢复后自动回切。由 <code>market_source</code> 控制。</div>
+    <div class="kv"><b>双登录</b>CTP 交易链路完整（认证 → 登录 → 结算确认 → 持仓查询，每 30 秒刷新）；aq 网关经内置 <code>gateway/aqgw.py</code> 以 HTTP/JSON 接入。</div>
+    <div class="kv"><b>下单路由</b><code>parallel</code> 两通道双发；<code>ctp_first</code> 市价单先走 CTP，成交后按累计成交量增量补发网关，超时即放弃网关侧。限价单始终并行。</div>
+    <div class="kv"><b>指令端口</b>TCP 4445，10 列 CSV 文本协议，同步应答 <code>OK/ERR</code>，成交异步推 <code>TRADE</code>。loginNr / groupName 仅落本地流水。</div>
+  </div>
+
+  <h3>数据流</h3>
+<pre><code>CTP 行情前置 ─┐
+              ├─(主备选择)─► 4444 行情端口 ──► 策略 / 终端
+aq 网关 SSE  ─┘
+
+策略 / 终端 ──► 4445 指令端口 ─► OrderRouter
+                                   ├─► CTP 交易前置（报单 / 撤单 / 成交回报）
+                                   └─► aq 网关 HTTP（open / place / cancel）
+                                         └─► 上游 astockquant（自有协议，TLS 直连）</code></pre>
+  <p>行情回灌 4444 时同时输出三类符号行：CTP 合约名（如 <code>ru2701</code>）、连续主力别名（品种代码小写，如 <code>ru</code>）与具体合约别名（合约小写 + <code>s</code>，如 <code>ru2701s</code>），保证不同下游（策略、终端）都能订阅到自己习惯的名字。</p>
+</section>
+
+<section id="files">
+  <h2>2 组件与文件</h2>
+  <table>
+    <tr><th>路径</th><th>作用</th></tr>
+    <tr><td><code>simple_ctp_console.cpp</code></td><td>主程序：配置加载、CTP 行情、行情主备选择、交易/网关/路由接线、退出清理</td></tr>
+    <tr><td><code>ctp_trader.cpp/.h</code></td><td>CTP 交易封装：认证、登录、结算确认、持仓查询、报单、撤单、成交/委托回报</td></tr>
+    <tr><td><code>gw_client.cpp/.h</code></td><td>aq 网关 HTTP 客户端：<code>/order</code>、<code>/orders</code>、<code>/positions</code>、<code>/stream</code>（手写 SSE）</td></tr>
+    <tr><td><code>order_router.cpp/.h</code></td><td>路由核心：parallel / ctp_first、撤单、orders.csv 落盘、成交回推</td></tr>
+    <tr><td><code>order_server.cpp/.h</code></td><td>4445 文本端口：CSV 解析、应答、异步推送、多客户端广播</td></tr>
+    <tr><td><code>app_util.cpp/.h</code></td><td>字符串 / CSV / 合约前缀 / 时间工具</td></tr>
+    <tr><td><code>gateway/aqgw.py</code></td><td>内置网关：HTTP/JSON ↔ 上游自有协议（依赖 <code>aqclient.py</code>、<code>aqproto.py</code>、<code>aqcrypto.py</code>、<code>lzss.py</code>，纯标准库）</td></tr>
+    <tr><td><code>strategy/ma_cross.py</code></td><td>一分钟双均线策略 demo（4444 取行情，4445 下单）</td></tr>
+    <tr><td><code>strategy/live_test.py</code></td><td>全链路联调脚本（11 项，真实网关 + 真实 CTP）</td></tr>
+    <tr><td><code>config.ini</code></td><td>唯一运行配置；<code>Debug\config.ini</code> 为运行目录副本（编译后自动同步）</td></tr>
+    <tr><td><code>Debug\orders.csv</code></td><td>订单流水（CTP / GW / CAN 三类记录）</td></tr>
+    <tr><td><code>Debug\feedserver.log</code></td><td>运行日志（中文，逐笔记录报单、成交、撤单、错误）</td></tr>
+  </table>
+  <div class="note">工程文件 <code>simple_ctp_console_x86.vcxproj</code> / <code>SimpleCTPConsole_x86.sln</code>：Win32、v143、C++17、MultiByte、<code>/utf-8</code>；CTP 6.7.9 库位于 <code>Debug\win32</code>。</div>
+</section>
+
+<section id="start">
+  <h2>3 启动与编译</h2>
+  <h3>3.1 编译</h3>
+<pre><code>msbuild simple_ctp_console_x86.vcxproj /p:Configuration=Debug /p:Platform=Win32 /m</code></pre>
+  <p>输出 <code>Debug\SimpleCTPConsole.exe</code>，PostBuild 自动拷贝 CTP 运行库与根目录 <code>config.ini</code> 到 <code>Debug\</code>。</p>
+
+  <h3>3.2 启动顺序</h3>
+<pre><code># 1) 启动内置网关（读取 config.ini，默认端口 8222）
+.\start_gateway.ps1            # 加 -Restart 先结束旧网关进程
+
+# 2) 启动控台
+.\Debug\SimpleCTPConsole.exe
+
+# 3) 启动策略（可选）
+python strategy\ma_cross.py --symbol ru2701 --fast 5 --slow 20 --qty 1</code></pre>
+  <div class="warn">控台进程依赖标准输入存活：后台启动时必须重定向 stdin 并保持句柄打开，否则 <code>Program started. Press Ctrl+C to exit.</code> 后会立即退出。</div>
+
+  <h3>3.3 启动成功标志（feedserver.log）</h3>
+<pre><code>[..] OrderServer listening on port 4445
+[..] CTP trade front: tcp://...
+[..] Gateway SSE connected
+[..] CTP trade login ok, FrontID=.. SessionID=.. MaxOrderRef=..
+[..] CTP settlement confirm request, ret=0
+[..] CTP trade ready
+[..] CTP positions refreshed, long=0(0) short=0(0)</code></pre>
+</section>
+
+<section id="config">
+  <h2>4 config.ini</h2>
+  <p>根目录 <code>config.ini</code> 为唯一配置源；修改后同步到 <code>Debug\config.ini</code>（重新编译会自动同步）。</p>
+  <table>
+    <tr><th>键</th><th>默认</th><th>说明</th></tr>
+    <tr><td><code>feedport</code></td><td>4444</td><td>行情端口，协议保持不变（不可破坏既有终端）</td></tr>
+    <tr><td><code>userLogin</code> / <code>userPassword</code> / <code>brokerID</code></td><td>—</td><td>CTP 账号（行情与交易共用）。SimNow：BrokerID=9999</td></tr>
+    <tr><td><code>connectaddress</code></td><td>—</td><td>CTP 行情前置，逗号分隔多组</td></tr>
+    <tr><td><code>tradeaddress</code></td><td>—</td><td>CTP 交易前置，逗号分隔多组</td></tr>
+    <tr><td><code>instruments</code></td><td>—</td><td>CTP 订阅合约</td></tr>
+    <tr><td><code>market_source</code></td><td>both</td><td><code>both</code>=CTP 主 + 网关备并自动回切；<code>ctp</code>=仅 CTP；<code>gateway</code>=仅网关</td></tr>
+    <tr><td><code>order_mode</code></td><td>parallel</td><td><code>parallel</code>=两通道双发；<code>ctp_first</code>=市价单先 CTP 后网关</td></tr>
+    <tr><td><code>order_port</code></td><td>4445</td><td>指令端口；≤0 或空表示关闭指令入口</td></tr>
+    <tr><td><code>ctp_first_timeout_ms</code></td><td>3000</td><td>ctp_first 等待 CTP 成交的时限，超时放弃网关侧</td></tr>
+    <tr><td><code>gw_base</code></td><td>http://127.0.0.1:8222</td><td>网关地址</td></tr>
+    <tr><td><code>gw_token</code></td><td>空</td><td>仅当网关设置了 <code>AQGW_TOKEN</code> 时使用，作为 <code>X-Auth-Token</code></td></tr>
+    <tr><td><code>gw_account</code> / <code>gw_password</code> / <code>gw_server</code></td><td>—</td><td>内置网关连接上游的账号 / 密码 / 服务器（<code>主机:端口</code>）</td></tr>
+    <tr><td><code>gw_symbols</code></td><td>ru,ag</td><td>网关订阅的品种级代码（小写）</td></tr>
+    <tr><td><code>userproductinfo</code> / <code>authcode</code> / <code>appid</code></td><td>—</td><td>CTP 认证参数；SimNow 默认 <code>simnow_client_test</code> 与 16 个 0</td></tr>
+    <tr><td><code>feed_login</code> / <code>feed_password</code></td><td>localhost</td><td>4444 行情端口客户端登录凭据</td></tr>
+  </table>
+  <div class="note">账号密码等敏感字段不要写入文档或工单；修改配置后需重启控台生效，网关账号在启动网关时读取。</div>
+</section>
+
+<section id="feed">
+  <h2>5 行情端口 4444（保持原有协议）</h2>
+  <p>文本协议，行分隔，<code>\r\n</code> 或 <code>\n</code> 均可。</p>
+<pre><code>&lt;服务端&gt; Login:
+&lt;客户端&gt; localhost
+&lt;服务端&gt; Password:
+&lt;客户端&gt; localhost
+&lt;服务端&gt; ... granted ...
+&lt;客户端&gt; &gt; Symbols:ru2701
+# 一次订阅，收到三行（订阅 ru 或 ru2701s 也会拿到同样三行）
+&lt;服务端&gt; ru2701   1762060800 19315.0 19320.0 19317.5 ...   # CTP 合约
+&lt;服务端&gt; ru       1762060800 19315.0 19320.0 19317.5 ...   # 连续主力别名
+&lt;服务端&gt; ru2701s  1762060800 19315.0 19320.0 19317.5 ...   # 具体合约别名</code></pre>
+  <p>字段：<code>symbol timestamp bid ask ...</code>；策略侧只需 <code>parts[0]</code>、<code>parts[2]</code>、<code>parts[3]</code>。时间戳为秒级。别名规则：连续主力 = 品种代码小写（<code>ru</code> / <code>ag</code>），具体合约 = 合约代码小写 + <code>s</code>（<code>ru2701s</code>）。</p>
+</section>
+
+<section id="order">
+  <h2>6 指令端口 4445</h2>
+  <p>TCP 文本，每行一条指令，10 列 CSV（逗号分隔，末尾 comment 可含逗号，会原样拼回）：</p>
+<pre><code>BUYorSELL, lotnr, symbol, price, loginNr, groupName, orderType, OPENorCLOSE, BidAskDif, comment</code></pre>
+  <table>
+    <tr><th>列</th><th>取值</th><th>说明</th></tr>
+    <tr><td>1</td><td><code>BUY</code> / <code>SELL</code></td><td>买卖方向（大小写不敏感）</td></tr>
+    <tr><td>2</td><td>正整数</td><td>手数，≤0 返回 <code>ERR invalid lotnr</code></td></tr>
+    <tr><td>3</td><td>合约</td><td>CTP 合约名（<code>ru2701</code>）；D 指令可空或 <code>*</code> 表示全撤</td></tr>
+    <tr><td>4</td><td>价格</td><td>M 时为参考价，L 时为限价</td></tr>
+    <tr><td>5</td><td>loginNr</td><td>仅写入 orders.csv 与日志，不发任何一侧</td></tr>
+    <tr><td>6</td><td>groupName</td><td>同上，用于审计 / 未来分组</td></tr>
+    <tr><td>7</td><td><code>M</code> / <code>L</code> / <code>S</code> / <code>D</code></td><td>市价 / 限价 / 止损（不支持） / 撤单</td></tr>
+    <tr><td>8</td><td><code>OPEN</code> / <code>CLOSE</code></td><td>开仓 / 平仓</td></tr>
+    <tr><td>9</td><td>BidAskDif</td><td>M 单价格偏移单位（ru 最小变动价 5）</td></tr>
+    <tr><td>10</td><td>comment</td><td>CTP 写入 <code>BusinessUnit</code>（≤20 字符）；网关截断 31 字符</td></tr>
+  </table>
+
+  <h3>6.1 指令语义</h3>
+  <table>
+    <tr><th>类型</th><th>CTP 侧</th><th>网关侧</th></tr>
+    <tr><td><code>M</code> 市价</td><td><code>LimitPrice = price ± 20 × BidAskDif</code>（买加卖减）+ IOC</td><td><code>action=open</code>，<code>cmd=buy|sell</code></td></tr>
+    <tr><td><code>L</code> 限价</td><td><code>LimitPrice = price</code> + GFD</td><td><code>action=place</code>，<code>cmd=buy_limit|sell_limit</code></td></tr>
+    <tr><td><code>S</code> 止损</td><td colspan="2">两侧均不支持，返回 <code>ERR unsupported orderType S</code></td></tr>
+    <tr><td><code>D</code> 撤单</td><td>撤全部（或仅指定合约）</td><td>查 <code>/orders</code> 后逐单 <code>cancel</code></td></tr>
+  </table>
+  <div class="note">平仓在网关侧就是反向 <code>open</code>：买平 → 网关 <code>sell</code>，卖平 → 网关 <code>buy</code>，不需要 ticket 映射表。网关 symbol 取 CTP 合约字母前缀并转小写（<code>ru2701 → ru</code>）。</div>
+
+  <h3>6.2 应答格式（原样）</h3>
+  <p>所有应答追加 <code>group=Gxxxxxxxxxx</code>（10 位序号，对应 orders.csv 里的同一指令两侧关联键），便于复盘：</p>
+<pre><code>OK ref=000000000002 gw=14123 group=G0000000001   # 并行：两通道 3s 内均返回
+OK ref=000000000002 gw=PENDING group=G0000000001 # 并行：网关腿 3s 内未返回，worker 稍后补推 GW_TICKET
+OK ref=000000000002 gw=PENDING group=G0000000001 # ctp_first：CTP 已报出，网关待补发
+OK cancel ctp=3 gw=1 group=G0000000005            # 撤单：CTP 发出 3 笔，网关完成 1 笔
+ERR bad format, need 8+ fields
+ERR bad action
+ERR bad OPENorCLOSE
+ERR invalid lotnr
+ERR symbol required
+ERR unsupported orderType S
+ERR unsupported orderType X
+ERR ctp=ctp_not_ready gw=gateway_not_configured
+ERR ctp=... gw=...</code></pre>
+
+  <h3>6.3 异步推送</h3>
+<pre><code>TRADE 000000000002,19310.0000,1,CTP      # CTP 成交（ref = OrderRef）
+TRADE 14123,19240.0000,1.00,GW           # 网关成交（ticket）
+GW_TICKET G0000000001,14123               # 并行网关腿异步出结果（gw=PENDING 时必随后推送）
+GW_FAIL G0000000001,timeout               # 并行网关腿最终失败</code></pre>
+  <p>所有推送广播给已连接 4445 的客户端；客户端读循环需按行前缀 <code>TRADE</code> / <code>GW_TICKET</code> / <code>GW_FAIL</code> / <code>OK</code> / <code>ERR</code> 分类处理。</p>
+
+  <h3>6.4 指令示例</h3>
+<pre><code># 市价买开 1 手 ru2701，参考价 19315，ru 最小变动 5
+BUY,1,ru2701,19315,<YOUR_CTP_INVESTOR_ID>,ai_test,M,OPEN,5,ma_golden
+
+# 限价卖开 1 手
+SELL,1,ru2701,19330,<YOUR_CTP_INVESTOR_ID>,ai_test,L,OPEN,5,limit_short
+
+# 市价卖平多头
+SELL,1,ru2701,19310,<YOUR_CTP_INVESTOR_ID>,ai_test,M,CLOSE,5,ma_death
+
+# 全撤（symbol 空或 *）
+BUY,1,,0,<YOUR_CTP_INVESTOR_ID>,ai_test,D,OPEN,5,cancel_all
+
+# 只撤 ru2701
+BUY,1,ru2701,0,<YOUR_CTP_INVESTOR_ID>,ai_test,D,OPEN,5,cancel_ru</code></pre>
+</section>
+
+<section id="routes">
+  <h2>7 路由规则</h2>
+
+  <h3>7.1 parallel（默认）</h3>
+  <p>每条指令同时提交 CTP 与网关，互不等待。CTP 同步发出（毫秒级），网关腿放到独立 worker 线程执行，主请求线程<b>最多等 3s</b>：</p>
+  <table>
+    <tr><th>结果</th><th>应答</th><th>说明</th></tr>
+    <tr><td>两侧成功（3s 内）</td><td><code>OK ref=000000000002 gw=14123 group=G0000000001</code></td><td>两通道各自建仓，成交由各自推送</td></tr>
+    <tr><td>网关腿超时</td><td><code>OK ref=000000000002 gw=PENDING group=G0000000001</code></td><td>CTP 已发；worker 稍后会落盘 GW 行并广播 <code>GW_TICKET G0000000001,14123</code></td></tr>
+    <tr><td>网关腿最终失败</td><td>同上先回 PENDING</td><td>worker 广播 <code>GW_FAIL G0000000001,timeout</code>，orders.csv 落 <code>GW ... FAIL</code> 行</td></tr>
+    <tr><td>仅 CTP 成功</td><td><code>OK ref=000000000002 gw=- group=...</code></td><td>网关未配置，不走异步分支</td></tr>
+    <tr><td>两侧失败</td><td><code>ERR ctp=... gw=...</code></td><td>两侧错误原因原样拼接</td></tr>
+  </table>
+  <p>3s 有界等待是为了避免网关上游 trade conn 卡顿（常见 4~25s）时拖慢客户端应答。网关腿真实超时上限由 GwClient 控制（30s），worker 会一直等到结果再推送。客户端收到 <code>gw=PENDING</code> 后应继续在 socket 上读，直到收到同 groupKey 的 <code>GW_TICKET</code> 或 <code>GW_FAIL</code>。</p>
+  <div class="note">parallel 模式下 CTP 与网关是两笔独立仓位，不是同一笔单的备份；请按用途选择模式。</div>
+
+  <h3>7.2 ctp_first（市价单先 CTP）</h3>
+  <p>仅对 <code>M</code> 市价单生效，<code>L</code> 限价单在两种模式下都走 parallel：</p>
+  <ol>
+    <li>先向 CTP 报单；CTP 未就绪或报单失败直接返回 <code>ERR ctp=...</code>，不再发网关。</li>
+    <li>CTP 报出成功先回 <code>OK ref=000000000002 gw=PENDING</code>。</li>
+    <li>收到 CTP 成交（<code>OnRtnTrade</code>）后，按“累计成交量 − 已补发量”的增量向网关发 <code>open</code>，保证部分成交只补实际成交量。</li>
+    <li>超过 <code>ctp_first_timeout_ms</code>（默认 3000ms）仍未成交，或委托被全拒/撤销，则放弃网关侧并记日志。</li>
+  </ol>
+  <p>实测链路：</p>
+<pre><code>OK ref=000000000002 gw=PENDING
+TRADE 000000000002,19310.0000,1,CTP
+Gateway order ok: ru BUY lots=1 ticket=14097
+TRADE 14097,19305.0000,1.00,GW</code></pre>
+
+  <h3>7.3 撤单（D）</h3>
+  <p>两侧并行执行，任一侧成功即为 <code>OK</code>：</p>
+  <ul>
+    <li><strong>CTP</strong>：<code>CancelAll</code>，symbol 为空或 <code>*</code> 表示全撤，否则只撤该合约。刚报出但尚未收到交易所确认的委托会等待 ≤500ms 补上 <code>OrderSysID</code>；仍拿不到则跳过并记 <code>CTP cancel deferred ref=...</code>，避免 ErrorID=148。</li>
+    <li><strong>网关</strong>：查 <code>/orders</code> 找出活动委托，逐笔 <code>cancel</code>；上游撤单通常只回进度帧，客户端在超时后复查挂单表确认已消失即判成功。</li>
+  </ul>
+<pre><code>OK cancel ctp=3 gw=1
+ERR ctp=- gw=gateway_not_configured</code></pre>
+
+  <h3>7.4 通道不可用时的行为</h3>
+  <table>
+    <tr><th>情况</th><th>行为</th></tr>
+    <tr><td>CTP 未 ready（未登录/断线）</td><td>CTP 侧记 <code>ctp_not_ready</code>；parallel 仍走网关，ctp_first 直接返回 ERR</td></tr>
+    <tr><td>网关未配置或不可达</td><td>网关侧记 <code>gateway_not_configured</code> / <code>bad_response</code>；parallel 仍走 CTP</td></tr>
+    <tr><td><code>S</code> 止损</td><td>两侧都不发，返回 <code>ERR unsupported orderType S</code></td></tr>
+    <tr><td>两侧都不可用</td><td>返回 <code>ERR ctp=... gw=...</code> 或 <code>ERR no trading channel</code></td></tr>
+  </table>
+</section>
+
+<section id="ledger">
+  <h2>8 订单流水 orders.csv</h2>
+  <p>订单路由的所有动作落盘到 <code>Debug\orders.csv</code>（工作目录下的 <code>orders.csv</code>），追加写，进程启动时若无文件则写表头。用于审计 loginNr / groupName 与两通道对应关系。<strong>同一指令下发出的 CTP 和网关委托共享同一个 <code>groupKey</code></strong>（<code>G</code> + 10 位序号），借此可把两组 key 关联起来复盘两通道的并行 / 补发 / 撤单行为。</p>
+  <table>
+    <tr><th>列</th><th>说明</th></tr>
+    <tr><td><code>time</code></td><td>本地时间，<code>YYYY-MM-DD HH:MM:SS</code></td></tr>
+    <tr><td><code>groupKey</code></td><td>同一指令下两侧委托的关联键（<code>G0000000001</code>）。并行双发、ctp_first 补发、撤单都各自生成新 groupKey；CTP 异步成交事件（FILL 行）因脱离指令上下文，该列为空，可通过同时间窗口内的 CTP <code>key</code>（OrderRef）反向关联</td></tr>
+    <tr><td><code>source</code></td><td><code>CTP</code> / <code>GW</code> / <code>CAN</code>（撤单）</td></tr>
+    <tr><td><code>key</code></td><td>CTP 为 OrderRef；网关为 ticket；撤单为合约或 <code>*</code></td></tr>
+    <tr><td><code>symbol</code></td><td>CTP 合约（<code>ru2701</code>）</td></tr>
+    <tr><td><code>action</code></td><td><code>BUY</code> / <code>SELL</code> / <code>CANCEL</code></td></tr>
+    <tr><td><code>offset</code></td><td><code>OPEN</code> / <code>CLOSE</code> / <code>-</code></td></tr>
+    <tr><td><code>type</code></td><td><code>M</code> / <code>L</code> / <code>D</code></td></tr>
+    <tr><td><code>price</code></td><td>CTP 行写实际报单价（M 已按 20×BidAskDif 偏移），网关行写指令原价</td></tr>
+    <tr><td><code>volume</code></td><td>指令手数</td></tr>
+    <tr><td><code>filled</code></td><td>提交时为 0，成交由日志与 TRADE 推送体现</td></tr>
+    <tr><td><code>status</code></td><td><code>NEW</code>（并行 / ctp_first 主腿）/ <code>FOLLOW</code>（ctp_first 补发网关腿）/ <code>SENT</code>（撤单）/ <code>FILL</code>（CTP 成交事件）</td></tr>
+    <tr><td><code>loginNr</code> / <code>groupName</code></td><td>仅本地留存，不发送给任何一侧</td></tr>
+    <tr><td><code>comment</code></td><td>原样留存；写入 CTP <code>BusinessUnit</code> 时截断 ≤20 字符</td></tr>
+  </table>
+<pre><code>time,groupKey,source,key,symbol,action,offset,type,price,volume,filled,status,loginNr,groupName,comment
+2026-11-03 09:23:53,G0000000001,CTP,000000000002,ru2701,BUY,OPEN,M,19300.0000,1,0,NEW,<YOUR_CTP_INVESTOR_ID>,ai_test,ai_buy_open
+2026-11-03 09:23:53,G0000000001,GW,14117,ru2701,BUY,OPEN,M,19200.0000,1,0,NEW,<YOUR_CTP_INVESTOR_ID>,ai_test,ai_buy_open
+2026-11-03 09:23:57,G0000000005,CAN,*,*,CANCEL,-,D,0.0000,0,0,SENT,<YOUR_CTP_INVESTOR_ID>,ai_test,cancel_all</code></pre>
+</section>
+
+<section id="strategy">
+  <h2>9 策略 demo ma_cross</h2>
+  <p><code>strategy\ma_cross.py</code> 订阅 4444 行情，把 tick 聚合成 1 分钟 K 线，双均线金叉/死叉后向 4445 发单，用于验证整条链路。</p>
+<pre><code>python strategy\ma_cross.py --symbol ru2701 --fast 5 --slow 20 --qty 1 --tick 5 --allow-short</code></pre>
+  <table>
+    <tr><th>参数</th><th>默认</th><th>说明</th></tr>
+    <tr><td><code>--ini</code></td><td>根 config.ini</td><td>读取 4444/4445 端口与登录凭据</td></tr>
+    <tr><td><code>--symbol</code></td><td>ru2701</td><td>CTP 合约代码</td></tr>
+    <tr><td><code>--fast</code> / <code>--slow</code></td><td>5 / 20</td><td>快慢均线周期（分钟）</td></tr>
+    <tr><td><code>--qty</code></td><td>1</td><td>每次下单手数</td></tr>
+    <tr><td><code>--tick</code></td><td>5.0</td><td>最小变动价位，ru 为 5</td></tr>
+    <tr><td><code>--bar-seconds</code></td><td>60</td><td>K 线周期（秒）</td></tr>
+    <tr><td><code>--allow-short</code></td><td>关</td><td>允许反手做空；不加时只做多</td></tr>
+    <tr><td><code>--dry-run</code></td><td>关</td><td>只打印将发送的指令，不真正下单</td></tr>
+  </table>
+  <div class="note">联调脚本 <code>strategy\live_test.py</code> 覆盖 11 项用例，参数 <code>--symbol --qty --tick --feed-host --order-host</code>；<code>--tick</code> 默认 5.0。</div>
+</section>
+
+<section id="verify">
+  <h2>10 验证结果</h2>
+  <p>2026-11-02 日盘（13:30 后），SimNow 真实 CTP demo 账号 + 真实 aq 网关，单实例运行。</p>
+  <table>
+    <tr><th>项目</th><th>结果</th></tr>
+    <tr><td><code>live_test.py</code> 全部用例</td><td>11 / 11 PASS</td></tr>
+    <tr><td>CTP 市价开/平</td><td><code>status=a</code> → <code>status=0 traded=1</code>，<code>TRADE 000000000004,19310.0000,1,CTP</code></td></tr>
+    <tr><td>CTP 限价挂单 + 撤单</td><td><code>status=3</code> 挂单 → <code>status=5</code> 已撤，<code>OK cancel ctp=1 gw=1</code></td></tr>
+    <tr><td>交易所拒单日志</td><td><code>CTP order insert error ref=... ErrorID=51</code></td></tr>
+    <tr><td>网关开仓与成交</td><td><code>TRADE 14096,19315.0000,1.00,GW</code></td></tr>
+    <tr><td>ctp_first 完整链路</td><td><code>OK ref=... gw=PENDING</code> → CTP 成交 → 补发 ticket 14097/14098 → 网关成交</td></tr>
+    <tr><td>收尾持仓</td><td>CTP <code>long=0(0) short=0(0)</code>，网关 <code>positions:0 orders:0</code></td></tr>
+  </table>
+  <div class="note">已知限制：<code>live_test.py</code> 的收尾清仓只按本次创建的 ticket 匹配，网关反向 open 会生成新 ticket，常见 <code>[cleanup] 平掉测试仓位 0/4</code>，需手工用 <code>POST /order {"action":"close","ticket":N}</code> 清仓；网关对上游请求持锁串行，并发多笔时会排队变慢。</div>
+</section>
+
+<section id="trouble">
+  <h2>11 故障排查</h2>
+  <table>
+    <tr><th>现象</th><th>原因与处理</th></tr>
+    <tr><td><code>ErrorID=141</code> 密码已过期</td><td>登录被拒；在 SimNow 网站重置密码后更新 <code>userPassword</code>（根与 <code>Debug\config.ini</code>），重启控台</td></tr>
+    <tr><td><code>ErrorID=148</code> ExchangeID 无效</td><td>撤单时 <code>OrderSysID</code> 为空却填了 <code>ExchangeID</code>；代码已改为仅在 <code>OrderSysID</code> 非空时填，未确认委托会 deferred</td></tr>
+    <tr><td><code>ErrorID=26</code> 已全成交或已撤销</td><td>等待 <code>OrderSysID</code> 期间委托已终止才发撤单，属无害日志</td></tr>
+    <tr><td><code>ErrorID=48</code> 价格不是最小变动价位的整数倍</td><td>客户端传入的 <code>price</code> 未对齐合约 tick（行情中间价常带 0.5 尾数）。市价单会在此基础上再叠加 <code>±20×BidAskDif</code>，因此报价前必须先把 price 对齐到 tick；策略侧已按 <code>--tick</code> 四舍五入</td></tr>
+    <tr><td><code>ErrorID=51</code> 平仓手数不足</td><td>该侧没有对应方向的持仓（常见于两通道实际成交不同步）；不是协议错误，核对 <code>/positions</code> 与 CTP 持仓即可</td></tr>
+    <tr><td>网关持仓数量持续增加</td><td>网关的“平仓”是按反向开仓实现，会生成新 ticket 而不是冲销旧 ticket；净敞口正确但每张票据仍占用保证金。长跑策略需定期按 <code>GET /positions</code> 逐票 <code>close</code> 清理</td></tr>
+    <tr><td>4445 应答慢（数秒到 30 秒）</td><td>并行/先 CTP 模式下网关腿是同步请求，上游卡顿会拖慢应答；客户端读超时应设为 ≥35 秒，<code>live_test.py</code> 与 <code>ma_cross.py</code> 已按此设置</td></tr>
+    <tr><td>委托 <code>status=5</code> <code>SHFE:当前状态禁止报单</code></td><td>非交易时段（11:30–13:30、15:00 后）；交易时段恢复即可</td></tr>
+    <tr><td><code>ctp_not_ready</code></td><td>认证/登录/结算确认未完成或断线；看日志 <code>CTP trade ready</code> 与 <code>FrontID/SessionID</code></td></tr>
+    <tr><td>网关 <code>bad_response</code> / 请求超时</td><td>上游 trade conn 被断开；网关已内置自动重连（发单前探测连接、断开则重建，最多 3 次）。若仍持续失败，看 <code>/health</code> 的 <code>trade_reconnects</code> / <code>last_error</code>；需要时可 <code>POST /reconnect</code> 强制重建</td></tr>
+    <tr><td>下单返回 <code>order state unknown</code></td><td>请求已发出后连接断线，网关不会自动重发（避免重复委托）；先查 <code>GET /orders</code> 与 <code>GET /positions</code> 核对，再决定是否补单</td></tr>
+    <tr><td>网关进程随终端退出消失</td><td><code>Start-Process</code> 启动的进程可能随父 shell 结束被回收；常驻请在后台 shell 直接运行 <code>python aqgw.py ...</code></td></tr>
+    <tr><td><code>OrderServer: bind failed on port 4445</code></td><td>端口被占用或另一实例未退出；结束旧进程后重启</td></tr>
+    <tr><td>行情无 tick</td><td><code>market_source=both</code> 下 10s 无 tick 会自动切网关 SSE；检查 <code>/health</code> 与网关连接状态</td></tr>
+  </table>
+</section>
+
+<section id="agent">
+  <h2>12 Agent 速查</h2>
+  <p>供自动化 agent 快速调用，无需读源码。</p>
+  <table>
+    <tr><th>对象</th><th>地址 / 入口</th><th>说明</th></tr>
+    <tr><td>控台进程</td><td><code>Debug\SimpleCTPConsole.exe</code></td><td>工作目录须为 <code>Debug</code>，读同目录 <code>config.ini</code></td></tr>
+    <tr><td>行情</td><td><code>tcp 127.0.0.1:4444</code></td><td>Login/Password → <code>&gt; Symbols:ru2701</code></td></tr>
+    <tr><td>指令</td><td><code>tcp 127.0.0.1:4445</code></td><td>每行 10 列 CSV，应答 <code>OK ...</code> / <code>ERR ...</code></td></tr>
+    <tr><td>网关</td><td><code>http://127.0.0.1:8222</code></td><td><code>/health /symbols /orders /positions /stream</code>，下单 <code>POST /order</code></td></tr>
+    <tr><td>订单流水</td><td><code>Debug\orders.csv</code></td><td>追加写，字段见第 8 节</td></tr>
+    <tr><td>启动网关</td><td><code>.\start_gateway.ps1</code></td><td>账号/服务器从 <code>config.ini</code> 读取</td></tr>
+  </table>
+
+  <h3>12.1 最小调用序列</h3>
+<pre><code># 1) 健康检查
+GET http://127.0.0.1:8222/health
+
+# 2) 行情握手（4444）
+Login: / localhost / Password: / localhost / &gt; Symbols:ru2701
+
+# 3) 下单（4445），读一行应答
+BUY,1,ru2701,19315,<YOUR_CTP_INVESTOR_ID>,agent,M,OPEN,5,probe
+-&gt; OK ref=000000000002 gw=14097
+
+# 4) 撤单（4445）
+BUY,1,*,0,<YOUR_CTP_INVESTOR_ID>,agent,D,OPEN,5,cancel_all
+-&gt; OK cancel ctp=1 gw=1
+
+# 5) 查持仓
+GET http://127.0.0.1:8222/positions</code></pre>
+
+  <h3>12.2 结构化描述（供 agent 解析）</h3>
+<pre><code>{
+  "order_port": 4445,
+  "columns": ["side","lots","symbol","price","loginNr","groupName","orderType","offset","bidAskDif","comment"],
+  "orderType": {"M":"market","L":"limit","S":"unsupported","D":"cancel"},
+  "replies": {
+    "ok":  "OK ref=&lt;OrderRef|-> gw=&lt;ticket|PENDING|->",
+    "cancel_ok": "OK cancel ctp=&lt;n&gt; gw=&lt;n&gt;",
+    "err": "ERR &lt;reason&gt;"
+  },
+  "push": {
+    "ctp": "TRADE &lt;OrderRef&gt;,&lt;price&gt;,&lt;volume&gt;,CTP",
+    "gw":  "TRADE &lt;ticket&gt;,&lt;price&gt;,&lt;volume&gt;,GW"
+  },
+  "gateway_order": {"action":"open|place|cancel|close","symbol":"ru","cmd":"buy|sell|buy_limit|sell_limit","volume":1,"price":19330}
+}</code></pre>
+  <div class="note">安全边界：4444/4445 与网关默认只监听本机；不要暴露到公网。敏感账号密码只存在于 <code>config.ini</code>，不得写入日志或提交到仓库。</div>
+</section>
+
+</div>
+</body>
+</html>

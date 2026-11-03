@@ -1,0 +1,48 @@
+# ===== MSBuild / Visual Studio intermediates =====
+*.obj
+*.tlog
+*.ilk
+*.pdb
+*.idb
+*.lastbuildstate
+*.recipe
+*.FileListAbsolute.txt
+Cl.items.tlog
+.vs/
+*.suo
+*.user
+SimpleCTPConsole/
+x64/
+x86/
+ipch/
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.db
+history.db*
+
+# ===== Runtime / generated data (keep .example) =====
+*.log
+*.con
+orders.csv
+ctp_signals.csv
+feedserver.log
+ctp_ea_monitor.log
+*.raw
+*.dat
+mqlcache.dat
+
+# ===== Archives =====
+*.zip
+*.rar
+*.7z
+
+# ===== Local override config (optional, never commit) =====
+config.local.ini
+
+# ===== OS / editor =====
+Thumbs.db
+desktop.ini
+.DS_Store

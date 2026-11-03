@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EA2ctp 使用说明书（MT4 EA → CTP 控台 信号桥接）</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --ink: #1d2430; --muted: #5b6575; --line: #e3e7ee;
+    --brand: #1f6feb; --brand-soft: #eaf1ff; --ok: #177245; --warn: #9a6200; --bad: #b42318;
+    --code-bg: #0f1621; --code-ink: #d7e0ea;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.7 -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 32px 20px 80px; }
+  header { background: linear-gradient(135deg, #12325c 0%, #1f6feb 100%); color: #fff;
+    border-radius: 14px; padding: 30px 34px; box-shadow: 0 8px 28px rgba(20, 45, 90, .18); }
+  header h1 { margin: 0 0 8px; font-size: 26px; letter-spacing: .3px; }
+  header p { margin: 4px 0 0; opacity: .9; font-size: 14px; }
+  .pill { display: inline-block; background: rgba(255,255,255,.16);
+    border: 1px solid rgba(255,255,255,.28); border-radius: 999px; padding: 2px 10px;
+    margin: 12px 8px 0 0; font-size: 12.5px; }
+  nav { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px 18px; margin: 18px 0 26px; font-size: 14px; }
+  nav a { color: var(--brand); text-decoration: none; margin-right: 16px; white-space: nowrap; }
+  nav a:hover { text-decoration: underline; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 22px 26px; margin-bottom: 20px; }
+  h2 { font-size: 19px; margin: 0 0 14px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 16px; margin: 22px 0 8px; }
+  p { margin: 8px 0; }
+  code { font-family: "Cascadia Code", Consolas, "Courier New", monospace;
+    background: #f0f3f8; border: 1px solid #e1e6ef; border-radius: 5px; padding: 1px 5px; font-size: 13px; }
+  pre { background: var(--code-bg); color: var(--code-ink); border-radius: 10px;
+    padding: 14px 16px; overflow-x: auto; font-size: 13px; line-height: 1.6; margin: 10px 0; }
+  pre code { background: none; border: 0; color: inherit; padding: 0; font-size: inherit; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13.6px; }
+  th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: #f2f5fa; font-weight: 600; white-space: nowrap; }
+  td code { white-space: nowrap; }
+  .note, .warn, .ok, .bad { border-radius: 10px; padding: 10px 14px; margin: 12px 0; font-size: 14px; }
+  .note { background: var(--brand-soft); border-left: 4px solid var(--brand); }
+  .warn { background: #fff7e6; border-left: 4px solid var(--warn); }
+  .ok { background: #eefaf2; border-left: 4px solid var(--ok); }
+  .bad { background: #fef2f1; border-left: 4px solid var(--bad); }
+  footer { text-align: center; color: var(--muted); font-size: 13px; margin-top: 26px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>EA2ctp 使用说明书</h1>
+  <p>MT4 EA 决策 → 文件桥接 → SimpleCTPConsole 双通道下单（CTP + 网关）</p>
+  <span class="pill">MT4 build 225</span>
+  <span class="pill">MQL4</span>
+  <span class="pill">Win32 x86</span>
+  <span class="pill">2026-11-03 实测</span>
+</header>
+
+<nav>
+  <a href="#overview">1 概览</a>
+  <a href="#files">2 文件清单</a>
+  <a href="#flow">3 数据流</a>
+  <a href="#setup">4 首次配置</a>
+  <a href="#compile">5 编译 EA</a>
+  <a href="#run">6 启动顺序</a>
+  <a href="#format">7 指令格式</a>
+  <a href="#demo">8 Demo 案例</a>
+  <a href="#verify">9 验证方法</a>
+  <a href="#trouble">10 故障排查</a>
+  <a href="#limits">11 已知限制</a>
+  <a href="#package">12 交付包结构与复现</a>
+</nav>
+
+<section id="overview">
+  <h2>1 概览</h2>
+  <p>EA2ctp 把 MT4 里的策略决策转成交易指令，交给 SimpleCTPConsole 在 <strong>CTP 通道</strong>下单。本方案<strong>不使用任何网络协议中转</strong>，只用一个共享 CSV 文件做桥接，因此 MT4 和控台可以各自独立启动、独立重启。</p>
+
+  <table>
+    <tr><th>角色</th><th>路径</th><th>职责</th></tr>
+    <tr><td>MT4 终端</td><td><code>EA2ctp\terminal\</code></td><td>运行 EA，产出决策，写指令文件</td></tr>
+    <tr><td>EA 源码</td><td><code>EA2ctp\terminal\experts\Moving Average.mq4</code></td><td>MA 交叉策略，输出信号</td></tr>
+    <tr><td>指令文件</td><td><code>EA2ctp\terminal\experts\files\ctp_signals.csv</code></td><td>EA 写 / 控台读，单行 CSV</td></tr>
+    <tr><td>CTP 控台</td><td><code>strategy2gateway-ctp\Debug\SimpleCTPConsole.exe</code></td><td>轮询指令文件，双通道下单</td></tr>
+    <tr><td>网关</td><td><code>strategy2gateway-ctp\gateway\aqgw.py</code></td><td>HTTP 8222，aq 上游通道</td></tr>
+  </table>
+
+  <div class="note">
+    <strong>关键设计：</strong>EA 只负责「何时买/卖」，不碰价格、不碰手数精度、不碰通道选择。所有交易细节（品种映射、参考价、20×spread 保护价、groupKey、CSV 落盘）由控台的 <code>SignalWatcher</code> + <code>OrderRouter</code> 统一处理。这样 EA 可以极简，后续换策略对控台零影响。
+  </div>
+
+  <div class="warn">
+    <strong>本项目为纯 CTP 模式，网关不参与、也不需要启动。</strong>控台配置 <code>order_mode=ctp_only</code>，EA 信号经 <code>SignalWatcher</code> 调用 <code>g_orderRouter.Submit()</code> 后只下发 CTP 一条腿，<code>orders.csv</code> 只会出现 CTP 行，网关订单数保持不变。若把 <code>order_mode</code> 改回 <code>parallel</code>，同一套桥接代码会自动恢复 CTP + 网关双通道（此时才需要先启动网关）。
+  </div>
+</section>
+
+<section id="files">
+  <h2>2 文件清单</h2>
+  <table>
+    <tr><th>文件</th><th>说明</th></tr>
+    <tr><td><code>terminal\experts\Moving Average.mq4</code></td><td>改造版源码，输出信号、不本地下单</td></tr>
+    <tr><td><code>terminal\experts\Moving Average.ex4</code></td><td>MetaEditor 编译产物，MT4 实际加载这个</td></tr>
+    <tr><td><code>terminal\experts\files\ctp_signals.csv</code></td><td>信号中转文件（正常状态下为空，被消费后清空）</td></tr>
+    <tr><td><code>terminal\experts\logs\YYYYMMDD.log</code></td><td>EA 运行日志，含 <code>[EA2CTP]</code> 前缀行</td></tr>
+    <tr><td><code>ctp_console\Debug\config.ini</code></td><td>控台配置，<code>order_mode=ctp_only</code> + <code>ea_signal_file</code> 相对路径</td></tr>
+    <tr><td><code>ctp_console\Debug\orders.csv</code></td><td>订单流水，含 groupKey 列</td></tr>
+    <tr><td><code>ctp_console\Debug\feedserver.log</code></td><td>控台运行日志，含 CTP 报单/成交回报</td></tr>
+  </table>
+</section>
+
+<section id="flow">
+  <h2>3 数据流</h2>
+<pre><code>┌──────────────────┐  写 1 行 CSV    ┌─────────────────────────┐
+│ MT4 + EA (M1)    │───────────────▶│ ctp_signals.csv         │
+│ MA 金叉/死叉      │                 │ BUY,ru,M,OPEN,1,5,...   │
+└──────────────────┘                 └────────────┬────────────┘
+                                                   │ 每 800ms 轮询
+                                                   ▼
+                                     ┌─────────────────────────┐
+                                     │ SignalWatcher            │
+                                     │ 读 → 解析 → truncate     │
+                                     │ MatchInstrument(ru)      │
+                                     │ → ru2701                 │
+                                     │ 填 ask/bid 参考价        │
+                                     │ groupName=ea_ma          │
+                                     └────────────┬────────────┘
+                                                   ▼ ctp_only
+┌──────────────────┐                 ┌─────────────────────────┐
+│ CTP SimNow       │◀─── 仅 CTP ─────│ OrderRouter.Submit       │
+│ 交易前置         │                 │ 保护价 ±20×bidAskDif    │
+└────────┬─────────┘                 └────────────┬────────────┘
+         │ 成交回报                               │
+         ▼                                       ▼
+   持仓 / TRADE 推送                      orders.csv（含 groupKey）
+</code></pre>
+  <p>信号从 EA 写盘到控台消费的延迟上限约 <strong>800ms</strong>（轮询周期），实测端到端约 <strong>1 秒</strong>。本项目 <code>order_mode=ctp_only</code>，网关不参与，无需启动。</p>
+</section>
+
+<section id="setup">
+  <h2>4 首次配置</h2>
+
+  <h3>4.1 控台 config.ini</h3>
+  <p>在 <code>ctp_console\config.ini</code> 里确认这两项（<code>Debug\config.ini</code> 会在构建时被根配置覆盖，所以改根目录那份）：</p>
+<pre><code>order_mode=ctp_only
+ea_signal_file=..\..\terminal\experts\files\ctp_signals.csv</code></pre>
+  <p><strong>相对路径以 exe 所在目录（<code>ctp_console\Debug</code>）为基准</strong>，向上两级正好回到 <code>EA2ctp</code>，再进 <code>terminal\experts\files</code>。这样整个 <code>EA2ctp</code> 目录可以整体拷贝到任何机器、任何盘符，配置无需修改。</p>
+  <p>不配置时默认读 exe 目录下的 <code>ctp_signals.csv</code>。控台启动时会打印实际生效路径：</p>
+<pre><code>- EA2ctp signal watcher: ..\..\terminal\experts\files\ctp_signals.csv</code></pre>
+
+  <h3>4.2 品种映射</h3>
+  <p>EA 传的是 MT4 图表品种名（如 <code>ru</code>），控台用 <code>MatchInstrument()</code> 到 <code>instruments=</code> 列表里做前缀匹配，得到 CTP 合约代码：</p>
+  <table>
+    <tr><th>EA 输出</th><th>instruments 配置</th><th>匹配结果</th></tr>
+    <tr><td><code>ru</code></td><td><code>ru2701,...</code></td><td><code>ru2701</code></td></tr>
+    <tr><td><code>ag</code></td><td><code>ag2601,...</code></td><td><code>ag2601</code></td></tr>
+    <tr><td><code>ru2701</code>（完整代码）</td><td><code>ru2701,...</code></td><td><code>ru2701</code>（精确命中）</td></tr>
+  </table>
+  <div class="warn">前缀匹配要求 <code>instruments</code> 里确实存在该品种合约，否则控台打印 <code>[EA2CTP] unknown symbol prefix</code> 并丢弃该信号。</div>
+
+  <h3>4.3 EA 参数</h3>
+  <table>
+    <tr><th>参数</th><th>默认</th><th>含义</th></tr>
+    <tr><td><code>Lots</code></td><td>1</td><td>手数</td></tr>
+    <tr><td><code>BidAskDif</code></td><td>5</td><td>传给控台的点差系数，控台用 <code>price ± 20×BidAskDif</code> 生成 CTP 保护价</td></tr>
+    <tr><td><code>MovingPeriod</code></td><td>12</td><td>MA 周期</td></tr>
+    <tr><td><code>MovingShift</code></td><td>6</td><td>MA 偏移</td></tr>
+  </table>
+</section>
+
+<section id="compile">
+  <h2>5 编译 EA（老版 MT4 注意点）</h2>
+  <p>本项目终端是 <strong>MetaTrader 4 build 225</strong>，语法支持非常老，以下写法会直接编译失败：</p>
+  <table>
+    <tr><th>会报错的写法</th><th>本项目替代写法</th></tr>
+    <tr><td><code>FILE_OPEN_ALWAYS</code> / <code>FILE_SHARE_READ</code> / <code>FILE_SHARE_WRITE</code></td><td><code>FILE_CSV|FILE_WRITE</code></td></tr>
+    <tr><td><code>FILE_WRITE_ADD</code>（追加）</td><td>不用；文件每次被控台清空，覆盖写即可</td></tr>
+    <tr><td><code>INVALID_HANDLE</code></td><td><code>handle &lt; 0</code></td></tr>
+    <tr><td><code>DoubleToString(x, n)</code></td><td>字符串拼接隐式转换：<code>"a" + lots</code></td></tr>
+    <tr><td><code>IntegerToString(x)</code></td><td>同上，隐式转换</td></tr>
+    <tr><td><code>break</code> 写在 <code>if</code> 里（不在循环内）</td><td>保证 <code>break</code> 只在 <code>for</code> 体内</td></tr>
+  </table>
+
+  <h3>5.1 编译步骤</h3>
+  <ol>
+    <li>打开 <code>terminal\MetaEditor.exe</code></li>
+    <li>File → Open，选择 <code>experts\Moving Average.mq4</code></li>
+    <li>按 F7 编译，Compile 窗口应显示 <code>0 error(s), 0 warning(s)</code></li>
+    <li>生成的 <code>Moving Average.ex4</code> 会自动落在 <code>experts\</code> 目录</li>
+    <li>回 MT4，右键图表 → Expert Advisors → Refresh，再重新挂载 EA</li>
+  </ol>
+  <div class="note">MT4 运行中无法覆盖 .ex4 时会报 <code>cannot open file ... expert was not reloaded</code>。此时先从图表移除 EA，再编译，再挂回。</div>
+</section>
+
+<section id="run">
+  <h2>6 启动顺序</h2>
+  <p>纯 CTP 模式只需两步：先启动控台，再在 MT4 挂 EA。启动控台时要保证 CTP 行情已就绪，否则信号会带着 0 价格进场。</p>
+
+  <h3>6.1 网关（本项目不需要启动）</h3>
+  <p><code>order_mode=ctp_only</code> 下 EA 信号只报 CTP，网关进程无需运行。仅在把模式改回 <code>parallel</code> 做双通道验证时，才需要先启动网关。</p>
+<pre><code>cd E:\aqntFuturesCn\approachExamples\strategy2gateway-ctp\gateway
+python aqgw.py --symbols ru,ag --login <YOUR_ACCOUNT_ID> --password <YOUR_GW_PASSWORD> `
+  --srv-host 117.72.80.248 --srv-port 443 --port 8222</code></pre>
+  <p>自检：<code>http://127.0.0.1:8222/health</code> 返回 <code>connected=true</code>。</p>
+
+  <h3>6.2 启动控台</h3>
+<pre><code>cd E:\aqntFuturesCn\approachExamples\strategy2gateway-ctp\Debug
+.\SimpleCTPConsole.exe</code></pre>
+  <div class="warn">必须在 <code>Debug</code> 目录启动，因为 <code>config.ini</code> 用相对路径加载；建议直接双击 exe，不要用后台隐藏窗口方式启动（PDCurses 会在会话结束时被一起杀掉）。</div>
+  <p>自检：4444、4445 端口处于 LISTENING，日志出现 <code>CTP trade ready</code>。</p>
+
+  <h3>6.3 挂载 EA</h3>
+  <ol>
+    <li>MT4 登录账户 <code><YOUR_ACCOUNT_ID></code></li>
+    <li>打开目标图表（实证环境为 <code>ru</code> <strong>M1</strong>）</li>
+    <li>导航器里拖 <code>Moving Average</code> 到图表，勾选 Allow live trading</li>
+    <li>参数：Lots=1、BidAskDif=5、MovingPeriod=12、MovingShift=6</li>
+    <li>图表右上角出现笑脸，Experts 标签页出现 <code>loaded successfully</code></li>
+  </ol>
+
+  <h3>6.4 可选：控台守护</h3>
+  <p>PDCurses 控制台在后台/会话切换时可能异常退出。可在计划任务里挂一个 60 秒轮询的 watchdog，检测 4444 端口，缺失则重启 exe。本仓库提供脚本 <code>strategy2gateway-ctp\strategy\_watchdog.ps1</code>。</p>
+</section>
+
+<section id="format">
+  <h2>7 指令格式</h2>
+  <p>文件里每行一条指令，7 列，无表头，无引号包裹：</p>
+<pre><code>action,symbolPrefix,type,offset,lots,bidAskDif,comment
+BUY,ru,M,OPEN,1,5,ma_golden
+SELL,ag,M,CLOSE,1,1,ma_death_close</code></pre>
+
+  <table>
+    <tr><th>列</th><th>取值</th><th>说明</th></tr>
+    <tr><td>1 action</td><td><code>BUY</code> / <code>SELL</code></td><td>方向</td></tr>
+    <tr><td>2 symbolPrefix</td><td><code>ru</code> / <code>ag</code> / <code>au</code></td><td>MT4 图表品种名，控台负责映射</td></tr>
+    <tr><td>3 type</td><td><code>M</code> / <code>L</code> / <code>D</code></td><td>市价 / 限价 / 撤销</td></tr>
+    <tr><td>4 offset</td><td><code>OPEN</code> / <code>CLOSE</code></td><td>开仓 / 平仓</td></tr>
+    <tr><td>5 lots</td><td>整数</td><td>手数</td></tr>
+    <tr><td>6 bidAskDif</td><td>数值</td><td>保护价系数，控台算 <code>price ± 20×bidAskDif</code></td></tr>
+    <tr><td>7 comment</td><td>任意文本</td><td>原样写入 orders.csv 末列，便于溯源</td></tr>
+  </table>
+
+  <div class="note">
+    <strong>保护价机制：</strong>控台拿到参考价后不会原样报出，而是 <code>买入价 + 20×bidAskDif</code>、<code>卖出价 − 20×bidAskDif</code>，再以 IOC 委托发出。这是一个有意为之的成交保障：宁可让价，也要立即成交、不留挂单。EA 端无需关心这个细节。
+  </div>
+</section>
+
+<section id="demo">
+  <h2>8 Demo 案例：13:32 金叉全程复盘</h2>
+  <p>以下为 2026-11-03 下午开盘后的真实一次完整链路执行，作为系统的验收样例。<strong>该样本采集于 <code>order_mode=parallel</code> 时期</strong>，因此 orders.csv 里同时出现了 GW 与 CTP 两行；切成 <code>ctp_only</code> 后同样场景只会保留 CTP 那一行。</p>
+
+  <h3>8.1 环境</h3>
+  <table>
+    <tr><th>项</th><th>值</th></tr>
+    <tr><td>MT4</td><td>build 225，账户 <code><YOUR_ACCOUNT_ID></code>，图表 <code>ru</code> M1</td></tr>
+    <tr><td>控台</td><td><code>SimpleCTPConsole.exe</code> PID 58632，4444/4445</td></tr>
+    <tr><td>网关</td><td><code>aqgw.py</code> PID 48812，HTTP 8222，ticket 累计 ok=97 fail=0</td></tr>
+    <tr><td>CTP 前置</td><td>SimNow <code>182.254.243.31:30001/2/3</code></td></tr>
+    <tr><td>合约</td><td><code>ru2701</code></td></tr>
+  </table>
+
+  <h3>8.2 时间线</h3>
+  <table>
+    <tr><th>时间</th><th>环节</th><th>证据</th></tr>
+    <tr><td>13:32:01</td><td>EA 判定金叉</td><td><code>Moving Average ru,M1: [EA2CTP] MA golden cross -&gt; BUY OPEN</code></td></tr>
+    <tr><td>13:32:01</td><td>EA 写指令文件</td><td><code>[EA2CTP] SIGNAL: BUY,ru,M,OPEN,1.00000000,5.00000000,ma_golden</code></td></tr>
+    <tr><td>13:32:01~02</td><td>控台轮询消费</td><td>文件被 truncate，读后大小为 0</td></tr>
+    <tr><td>13:32:02</td><td>CTP 报单</td><td><code>CTP insert ref=000000000002 BUY OPEN ru2701 vol=1 px=19295.0000 IOC</code></td></tr>
+    <tr><td>13:32:02</td><td>CTP 成交</td><td><code>CTP trade ref=000000000002 BUY OPEN ru2701 px=19190.0000 vol=1</code></td></tr>
+    <tr><td>13:32:02</td><td>网关成交</td><td><code>Gateway order ok: ru BUY lots=1 ticket=14147</code></td></tr>
+    <tr><td>13:32:02</td><td>路由汇总</td><td><code>Order routed group=G0000000001: OK ref=000000000002 gw=14147</code></td></tr>
+    <tr><td>13:32:03</td><td>网关持仓落地</td><td><code>Gateway position opened: TRADE 14147,19185.0000,1.00,GW</code></td></tr>
+    <tr><td>13:32:56</td><td>CTP 持仓确认</td><td><code>CTP positions refreshed, long=1(1) short=0(0)</code></td></tr>
+  </table>
+
+  <h3>8.3 orders.csv 落盘</h3>
+<pre><code>2026-11-03 13:32:02,G0000000001,GW,14147,ru2701,BUY,OPEN,M,19195.0000,1,0,NEW,<YOUR_CTP_INVESTOR_ID>,ea_ma,ma_golden
+2026-11-03 13:32:02,G0000000001,CTP,000000000002,ru2701,BUY,OPEN,M,19295.0000,1,0,NEW,<YOUR_CTP_INVESTOR_ID>,ea_ma,ma_golden
+2026-11-03 13:32:02,,CTP,000000000002,ru2701,BUY,OPEN,T,19190.0000,1,1,FILL,,,
+</code></pre>
+  <p>前两行是并行下单的两条通道，共用同一个 <code>groupKey=G0000000001</code>；第三行是 CTP 异步成交回报（<code>FILL</code>，groupKey 留空，可用 OrderRef 反查）。</p>
+
+  <h3>8.4 价格是怎么算出来的</h3>
+  <table>
+    <tr><th>步骤</th><th>数值</th><th>来源</th></tr>
+    <tr><td>EA 侧点差系数</td><td>5</td><td>EA 参数 BidAskDif</td></tr>
+    <tr><td>控台参考价</td><td>19195.0000</td><td>实时行情 ask</td></tr>
+    <tr><td>CTP 保护价</td><td>19295.0000</td><td>19195 + 20 × 5</td></tr>
+    <tr><td>CTP 实际成交</td><td>19190.0000</td><td>IOC 打单，卖盘直接成交</td></tr>
+    <tr><td>网关实际成交</td><td>19185.0000</td><td>另一套上游报价</td></tr>
+  </table>
+  <p>CTP 报 19295 而成交 19190，是保护价换来的立即成交，不是异常。两条通道成交价相差 5 点属正常范围（各自独立报盘）。</p>
+
+  <h3>8.5 本次结果</h3>
+  <table>
+    <tr><th>通道</th><th>持仓</th><th>成交价</th></tr>
+    <tr><td>CTP SimNow</td><td>ru2701 多头 1 手（today=1）</td><td>19190</td></tr>
+    <tr><td>网关 aq</td><td>ticket 14147，1 手</td><td>19185</td></tr>
+  </table>
+  <div class="ok">从 EA 判定到两条通道全部成交，共 <strong>1~2 秒</strong>，无丢单、无重复单、groupKey 全程贯穿。</div>
+</section>
+
+<section id="verify">
+  <h2>9 验证方法</h2>
+  <p>每次跑完一批信号，按下面四步核对，能覆盖全链路：</p>
+
+  <h3>9.1 EA 有没有产出</h3>
+<pre><code>Get-Content "EA2ctp\terminal\experts\logs\20261103.log" -Tail 20 | Select-String "EA2CTP"</code></pre>
+  <p>应看到 <code>[EA2CTP] MA golden cross</code> 与 <code>[EA2CTP] SIGNAL: ...</code> 成对出现。</p>
+
+  <h3>9.2 中转文件有没有被及时消费</h3>
+<pre><code>Get-Item "EA2ctp\terminal\experts\files\ctp_signals.csv" | Select-Object Length,LastWriteTime</code></pre>
+  <p>空闲状态下 <code>Length</code> 应为 0（信号已被读取并清空）。长期非 0 说明控台没跑或 <code>ea_signal_file</code> 指错。</p>
+
+  <h3>9.3 订单流水</h3>
+<pre><code>Get-Content "strategy2gateway-ctp\Debug\orders.csv" | Select-String ",ea_ma,"</code></pre>
+  <p>一笔信号应产生两行 <code>NEW</code>（GW + CTP），同一 groupKey；随后可能出现一行 <code>FILL</code>。</p>
+
+  <h3>9.4 两通道持仓</h3>
+<pre><code># CTP 侧
+Get-Content "strategy2gateway-ctp\Debug\feedserver.log" -Tail 30 | Select-String "positions refreshed"
+# 网关侧
+Invoke-RestMethod "http://127.0.0.1:8222/positions" | ConvertTo-Json
+Invoke-RestMethod "http://127.0.0.1:8222/health"   | ConvertTo-Json</code></pre>
+  <p>CTP 的 <code>long/short</code> 与网关的 <code>positions</code> 应反映同样的净方向；两套系统持仓独立计算，测试结束后需分别平掉。</p>
+</section>
+
+<section id="trouble">
+  <h2>10 故障排查</h2>
+  <table>
+    <tr><th>现象</th><th>原因</th><th>处理</th></tr>
+    <tr><td><code>cannot open file ...ex4, expert was not reloaded</code></td><td>MT4 运行中占用旧 ex4</td><td>图表移除 EA → 编译 → 重新挂载</td></tr>
+    <tr><td><code>FILE_SHARE_READ / FILE_OPEN_ALWAYS / INVALID_HANDLE not defined</code></td><td>build 225 不支持这些常量</td><td>改 <code>FILE_CSV|FILE_WRITE</code>，用 <code>handle &lt; 0</code> 判错</td></tr>
+    <tr><td><code>DoubleToString / IntegerToString is not defined</code></td><td>老版无此函数</td><td>用字符串拼接的隐式转换</td></tr>
+    <tr><td><code>break used within some cycle only</code></td><td><code>break</code> 出现在 <code>if</code>，不在循环内</td><td>把 <code>break</code> 移进 <code>for</code> 体</td></tr>
+    <tr><td>EA 日志一直无 <code>[EA2CTP]</code></td><td>EA 未挂载 / 未允许交易 / 未到新 K 线</td><td>确认笑脸图标与 Allow live trading；M1 周期需等下一根 K 线</td></tr>
+    <tr><td><code>unknown symbol prefix: xx</code></td><td><code>instruments</code> 里没有该品种</td><td>在 config.ini 补上对应合约代码</td></tr>
+    <tr><td>信号文件长期非空</td><td>控台未启动或路径不一致</td><td>核 <code>ea_signal_file</code> 与 EA 实际输出路径是否同一文件</td></tr>
+    <tr><td>控台进程无故消失</td><td>PDCurses 会话/窗口被清理</td><td>改为桌面双击启动，并启用 <code>_watchdog.ps1</code></td></tr>
+    <tr><td>只有 GW 行，没有 CTP 行</td><td>CTP 未登录成功（前置/密码/时段）</td><td>查 <code>feedserver.log</code> 的 <code>CTP trade login</code> 与 ErrorID</td></tr>
+    <tr><td><code>CTP order insert error ErrorID=51 平仓量不足</code></td><td>平仓成交后本地持仓缓存的方向算反（<code>SELL CLOSE</code> 被记成空头减少），导致后续平空误判无今仓而用"平昨"标志</td><td>已修复 <code>ApplyTradeToPosition</code>：平仓方向取委托方向的反向；重启控台会重新查询持仓纠正缓存</td></tr>
+    <tr><td>orders.csv 出现 0.0000 / 100.0000 的价格</td><td>控台启动后行情尚未推送，参考价取到 0，保护价变成 20×bidAskDif</td><td>等 CTP 行情就绪（日志出现行情订阅）再挂 EA；已产生 0 价单需手工撤单/平仓</td></tr>
+    <tr><td>改了 <code>order_mode=ctp_only</code> 但仍出现 GW 行</td><td>旧版 exe 的配置白名单只认 parallel/ctp_first，值被丢弃后回落成 parallel</td><td>重新编译；启动日志确认模式；检查 <code>Debug\config.ini</code> 是否被根配置覆盖</td></tr>
+    <tr><td>Rebuild 后 <code>ea_signal_file</code> 消失</td><td>构建会用根目录 <code>config.ini</code> 覆盖 <code>Debug\config.ini</code></td><td>把 <code>ea_signal_file</code> 写在<strong>根目录</strong> config.ini 里</td></tr>
+</table>
+</section>
+
+<section id="limits">
+  <h2>11 已知限制</h2>
+  <table>
+    <tr><th>限制</th><th>说明</th></tr>
+    <tr><td>EA 无法感知成交结果</td><td>桥接是单向的，EA 用本地 MT4 持仓判断平仓方向，与 CTP 实际持仓并非同一账本</td></tr>
+    <tr><td>平仓依赖 EA 本地状态</td><td><code>CheckForClose()</code> 遍历 MT4 本账户订单，CTP 侧仓位变化不会回写给 EA</td></tr>
+    <tr><td>每次只写一行</td><td><code>FILE_CSV|FILE_WRITE</code> 覆盖写；同一根 K 线内多次触发会覆盖前一条（M1 策略每根 K 线最多一次，正常不冲突）</td></tr>
+    <tr><td>轮询延迟</td><td>最坏 800ms，非实时事件驱动</td></tr>
+    <tr><td>不支持止损单</td><td>控台只处理 M/L/D 与开平仓，无 S 类型</td></tr>
+  </table>
+</section>
+
+<section id="package">
+  <h2>12 交付包结构与复现</h2>
+  <p>整个 <code>EA2ctp</code> 目录是自包含的：MT4 终端、EA 源码、CTP 控台（源码 + 已编译 exe + CTP SDK）全在里面，拷走后无需改任何配置即可运行。</p>
+
+  <h3>12.1 目录结构</h3>
+<pre><code>EA2ctp\
+├── 使用说明书.html              ← 本文档
+├── ctp_console\                 ← CTP 控台（信号接收 + 报单）
+│   ├── config.ini               ← order_mode=ctp_only + 相对路径
+│   ├── symbConfig.ini
+│   ├── *.cpp / *.h              ← 源码
+│   ├── SimpleCTPConsole_x86.sln
+│   ├── CTP\                     ← CTP 6.7.9 头文件 / x86 DLL
+│   ├── INIReader\  PDCurses\    ← 第三方库
+│   └── Debug\
+│       ├── SimpleCTPConsole.exe ← 已编译，可直接运行
+│       ├── config.ini
+│       ├── thostmduserapi_se.dll / thosttraderapi_se.dll
+│       └── win32\ (CTP SDK 头文件)
+└── terminal\                    ← MT4 终端
+    └── experts\
+        ├── Moving Average.mq4   ← 改造版 EA 源码
+        ├── Moving Average.ex4   ← 编译产物
+        ├── files\ctp_signals.csv
+        └── logs\</code></pre>
+
+  <h3>12.2 他人复现步骤</h3>
+  <table>
+    <tr><th>#</th><th>动作</th><th>校验点</th></tr>
+    <tr><td>1</td><td>整体拷贝 <code>EA2ctp</code> 到目标机器任意路径</td><td>路径含空格也可，相对路径解析不受影响</td></tr>
+    <tr><td>2</td><td>改 <code>ctp_console\config.ini</code> 的账号：<code>userLogin</code> / <code>userPassword</code> / <code>brokerID</code></td><td>用复现者自己的 SimNow 账号</td></tr>
+    <tr><td>3</td><td>桌面双击 <code>ctp_console\Debug\SimpleCTPConsole.exe</code></td><td>日志出现 <code>CTP trade ready</code>；控制台标题显示 ru 行情</td></tr>
+    <tr><td>4</td><td>启动 MT4 终端，登录 <strong>任意</strong>账户（EA 不下单，账户无实际用途）</td><td>能打开 ru 图表即可</td></tr>
+    <tr><td>5</td><td>MetaEditor 编译 <code>Moving Average.mq4</code>；在 ru/M1 图表挂载 EA</td><td>图表右上角绿色笑脸；日志出现 <code>[EA2CTP]</code> 行</td></tr>
+    <tr><td>6</td><td>等一根 M1 K 线出现金叉/死叉</td><td><code>ctp_signals.csv</code> 被写后 1 秒内清空；<code>orders.csv</code> 出现新行且只有 CTP 来源</td></tr>
+  </table>
+
+  <h3>12.3 复现排错要点</h3>
+  <table>
+    <tr><th>现象</th><th>原因</th><th>处理</th></tr>
+    <tr><td>信号文件长期非空</td><td>控台没运行；或相对路径算错</td><td>看启动日志 <code>- EA2ctp signal watcher: ...</code> 打印的路径，核对文件是否真的在那里</td></tr>
+    <tr><td>控台启动即退出</td><td>PDCurses 需要在真实控制台窗口</td><td>桌面双击启动，勿用后台 / 隐藏窗口方式</td></tr>
+    <tr><td>报单被拒 status=5</td><td>不在交易时段</td><td>ru 日盘 9:00–11:30 / 13:30–15:00，夜盘 21:00 起</td></tr>
+    <tr><td>成交价比报单价优 100+</td><td>保护价 <code>price ± 20×bidAskDif</code> 是有意设计</td><td>属正常，不是滑点异常</td></tr>
+  </table>
+</section>
+
+<footer>
+  EA2ctp 使用说明书 · 2026-11-03 · 实测环境 MT4 build 225 + SimpleCTPConsole(Win32 x86)
+</footer>
+
+</div>
+</body>
+</html>
