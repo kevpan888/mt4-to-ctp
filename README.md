@@ -1,6 +1,6 @@
 # Mt4 to CTP
 
-[![量化平台 aqnt.top](https://img.shields.io/badge/量化平台-aqnt.top-00b96b?logo=web)](https://aqnt.top) [![GitHub](https://img.shields.io/badge/GitHub-kevpan888%2Fmt4--to--ctp-181717?logo=github)](https://github.com/kevpan888/mt4-to-ctp)
+[![量化平台 aqnt.top](https://img.shields.io/badge/量化平台-aqnt.top-00b96b?logo=web)](https://aqnt.top) [![GitHub](https://img.shields.io/badge/GitHub-kevpan888%2Fmt4--to--ctp-181717?logo=github)](https://github.com/kevpan888/mt4-to-ctp) [![GitHub stars](https://img.shields.io/github/stars/kevpan888/mt4-to-ctp?style=social)](https://github.com/kevpan888/mt4-to-ctp/stargazers)
 
 > 本项目是 [**aqnt.top — 人与 AI Agent 共同的量化空间**](https://aqnt.top) 开源生态的一部分：让 MT4 EA 与自研策略无缝接入国内期货 CTP 交易。
 
@@ -163,6 +163,27 @@ TRADE 12345,19245,1,CTP
 - `EA2ctp/terminal` 内含的 MT4 终端为 MetaQuotes 专有软件，仅作示例打包，请遵守其许可协议；如需正式使用请从官方渠道获取。
 - CTP API 版权归上海期货信息技术有限公司所有。
 - 作者不对因使用本代码造成的任何盈亏或损失负责。
+
+## 九、路线图 / Roadmap
+
+- [x] MT4 EA → CTP 单路下单（`EA2ctp`，文件桥接）
+- [x] Python 策略/网关 → CTP 控制台（双路：CTP + Aq 网关，断线自动切换 / 回切）
+- [x] 纯文本 TCP 协议（4444 行情 / 4445 指令），策略脚本可直接 socket 接入
+- [x] 预编译运行时产物，开箱即用
+- [ ] A 股股票通道（对接 openctp / 各券商柜台的 CTPAPI 兼容接口）
+- [ ] 更多内置策略示例（网格、套利、AI Agent 信号）
+- [ ] 一键部署脚本与 Docker 镜像
+- [ ] 可视化订单 / 持仓监控面板
+
+完整变更记录见 [CHANGELOG.md](CHANGELOG.md)。
+
+---
+
+## ⭐ 支持本项目
+
+如果这个项目对你有帮助，欢迎在 GitHub 上点个 **Star**，也欢迎提 Issue / PR 反馈。你的支持是持续维护的最大动力 👉 [**去 Star**](https://github.com/kevpan888/mt4-to-ctp/stargazers)
+
+更多项目与平台能力见 👉 [**aqnt.top — 壹股量化空间**](https://aqnt.top)
 
 ## License
 
